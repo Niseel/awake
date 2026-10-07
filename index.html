@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keep Awake</title>
+<style>
+  :root { --bg:#f6f6f4; --fg:#1d1d1b; --muted:#7a7a74; --accent:#2f7d5b; --off:#b5482f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --fg:#ececea; --muted:#8f8f88; --accent:#5cc093; --off:#e0785c; } }
+  * { box-sizing:border-box; }
+  body { margin:0; height:100vh; background:var(--bg); color:var(--fg);
+         font:15px/1.5 system-ui, sans-serif; display:flex; flex-direction:column;
+         align-items:center; justify-content:center; gap:16px; overflow:hidden; }
+  #stage { position:fixed; inset:0; pointer-events:none; }
+  #dot { position:absolute; width:14px; height:14px; border-radius:50%; background:var(--accent);
+         opacity:.6; transition:left 2.5s ease-in-out, top 2.5s ease-in-out; }
+  button { font:inherit; padding:10px 22px; border-radius:8px; border:1px solid var(--muted);
+           background:transparent; color:var(--fg); cursor:pointer; position:relative; z-index:1; }
+  #status { font-weight:600; position:relative; z-index:1; }
+  #status.on { color:var(--accent); } #status.off { color:var(--off); }
+  #info { color:var(--muted); font-size:13px; position:relative; z-index:1; text-align:center; }
+</style>
+</head>
+<body>
+  <div id="stage"><div id="dot"></div></div>
+  <div id="status" class="off">Đang tắt</div>
+  <button id="toggle">Bật giữ màn hình</button>
+  <div id="info">Giữ tab này hiển thị (không thu nhỏ, không chuyển tab).</div>
+
+<script>
+  let lock = null, wanted = false, started = null;
+  const statusEl = document.getElementById('status');
+  const btn = document.getElementById('toggle');
+  const info = document.getElementById('info');
+  const dot = document.getElementById('dot');
+
+  function render() {
+    const on = !!lock;
+    statusEl.textContent = on ? 'Đang giữ màn hình thức' : (wanted ? 'Tạm mất khóa — mở lại tab này' : 'Đang tắt');
+    statusEl.className = on ? 'on' : 'off';
+    btn.textContent = wanted ? 'Tắt' : 'Bật giữ màn hình';
+  }
+
+  async function acquire() {
+    if (!('wakeLock' in navigator)) {
+      info.textContent = 'Trình duyệt này không hỗ trợ Screen Wake Lock. Hãy dùng Chrome hoặc Edge.';
+      return;
+    }
+    try {
+      lock = await navigator.wakeLock.request('screen');
+      lock.addEventListener('release', () => { lock = null; render(); });
+    } catch (e) {
+      info.textContent = 'Không lấy được wake lock: ' + e.message;
+    }
+    render();
+  }
+
+  btn.addEventListener('click', async () => {
+    wanted = !wanted;
+    if (wanted) { started = Date.now(); await acquire(); }
+    else { if (lock) await lock.release(); lock = null; started = null; render(); }
+  });
+
+  // Trình duyệt tự nhả khóa khi tab bị ẩn, nên lấy lại khi tab hiện lên
+  document.addEventListener('visibilitychange', () => {
+    if (wanted && !lock && document.visibilityState === 'visible') acquire();
+  });
+
+  // Chuyển động: chấm tròn trôi tới vị trí ngẫu nhiên sau khoảng thời gian ngẫu nhiên
+  function moveDot() {
+    dot.style.left = (Math.random() * (innerWidth - 20)) + 'px';
+    dot.style.top  = (Math.random() * (innerHeight - 20)) + 'px';
+    setTimeout(moveDot, 3000 + Math.random() * 7000);
+  }
+  moveDot();
+
+  setInterval(() => {
+    if (started && lock) {
+      const m = Math.floor((Date.now() - started) / 60000);
+      info.textContent = `Đã giữ ${Math.floor(m / 60)}h ${m % 60}m. Giữ tab này hiển thị.`;
+    }
+  }, 30000);
+
+  render();
+</script>
+</body>
+</html>
